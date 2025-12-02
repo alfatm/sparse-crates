@@ -124,6 +124,7 @@
     "publish": "pnpm vsce publish --no-dependencies",
     "build:cli": "tsc && vite build",
     "cli": "node dist/cli.cjs",
+    "fix": "biome format --fix && biome check --fix",
     "validate": "pnpm run build:cli && node dist/cli.cjs"
   },
   "devDependencies": {
