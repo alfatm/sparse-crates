@@ -18,12 +18,14 @@ import type {
  * Extract the minimum version from a semver Range.
  * For ranges like "^1.1.0" returns "1.1.0".
  * For ranges like ">=1.0.0 <2.0.0" returns "1.0.0".
+ * For ranges like "<1.0.0" (no lower bound) returns "0.0.0".
  */
 export const getMinVersionFromRange = (range: semver.Range): semver.SemVer | null => {
   // semver.Range has a 'set' property which is an array of Comparator arrays
   // Each Comparator has an 'operator' and a 'semver' (SemVer object)
   // We need to find the minimum version from the range
   let minVersion: semver.SemVer | null = null
+  let hasLowerBound = false
 
   for (const comparators of range.set) {
     for (const comp of comparators) {
@@ -32,12 +34,18 @@ export const getMinVersionFromRange = (range: semver.Range): semver.SemVer | nul
         // For operators like >= or empty (which means = in semver), the semver is the minimum
         // Note: ^ and ~ are expanded by semver into >= and < comparators
         if (op === '' || op === '>=' || op === '>') {
+          hasLowerBound = true
           if (minVersion === null || comp.semver.compare(minVersion) < 0) {
             minVersion = comp.semver
           }
         }
       }
     }
+  }
+
+  // If no lower bound was found (e.g., "<1.0.0" from "^0"), the implicit minimum is 0.0.0
+  if (!hasLowerBound && minVersion === null) {
+    return new semver.SemVer('0.0.0')
   }
 
   return minVersion
@@ -73,7 +81,15 @@ export const compareVersionDiff = (
 
 /**
  * Compute dependency status based on the version specified in Cargo.toml and available versions.
- * Compares the minimum version from the range (what user specified) against latest stable.
+ *
+ * The logic is:
+ * 1. If latestStable satisfies the specified range, the dependency is up-to-date ("latest")
+ * 2. Otherwise, compare the minimum version from the range against latestStable to determine
+ *    how far behind the specification is
+ *
+ * This correctly handles short version formats like "0", "1", "1.0" which represent ranges:
+ * - "0" means >=0.0.0 <1.0.0, so if latestStable is 0.5.0, it's still "latest"
+ * - "1" means >=1.0.0 <2.0.0, so if latestStable is 1.9.0, it's still "latest"
  */
 export const computeStatus = (
   specifiedRange: semver.Range,
@@ -84,13 +100,19 @@ export const computeStatus = (
     return 'error'
   }
 
+  // Compare against latest stable if available, otherwise against latest (which may be prerelease)
+  const targetVersion = latestStable ?? latest
+
+  // If the target version satisfies the specified range, the dependency is up-to-date
+  if (specifiedRange.test(targetVersion)) {
+    return 'latest'
+  }
+
+  // Otherwise, compare the minimum version from the range against the target
   const specifiedVersion = getMinVersionFromRange(specifiedRange)
   if (!specifiedVersion) {
     return 'error'
   }
-
-  // Compare against latest stable if available, otherwise against latest (which may be prerelease)
-  const targetVersion = latestStable ?? latest
 
   return compareVersionDiff(specifiedVersion, targetVersion)
 }

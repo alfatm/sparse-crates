@@ -11,10 +11,10 @@ import type { DependencyStatus, DependencyValidationResult } from './types.js'
 // 🔴 major-behind - red (needs attention)
 // 🔴 error - red
 export const SYMBOL_LATEST = '✅'
-export const SYMBOL_PATCH_BEHIND = '🟡'
-export const SYMBOL_MINOR_BEHIND = '🟠'
-export const SYMBOL_MAJOR_BEHIND = '❌'
-export const SYMBOL_ERROR = '❗❗❗'
+export const SYMBOL_PATCH_BEHIND = '🟨'
+export const SYMBOL_MINOR_BEHIND = '🟧'
+export const SYMBOL_MAJOR_BEHIND = '🟥'
+export const SYMBOL_ERROR = '❗'
 
 const STATUS_SYMBOLS: Record<DependencyStatus, string> = {
   latest: SYMBOL_LATEST,
@@ -28,6 +28,8 @@ const STATUS_SYMBOLS: Record<DependencyStatus, string> = {
  * Result of formatting a dependency for display
  */
 export interface FormattedDependency {
+  /** The dependency status */
+  status: DependencyStatus
   /** The decoration text (emoji + version if outdated) */
   decoration: string
   /** The hover message in markdown format */
@@ -44,6 +46,7 @@ export function formatDependencyResult(result: DependencyValidationResult, docsU
 
   if (status === 'error') {
     return {
+      status,
       decoration: SYMBOL_ERROR,
       hoverMarkdown: error?.message ?? 'unknown error',
     }
@@ -51,6 +54,7 @@ export function formatDependencyResult(result: DependencyValidationResult, docsU
 
   if (resolved === null) {
     return {
+      status: 'error',
       decoration: SYMBOL_ERROR,
       hoverMarkdown: `no versions of the crate ${name} satisfy the given requirement`,
     }
@@ -58,6 +62,7 @@ export function formatDependencyResult(result: DependencyValidationResult, docsU
 
   if (latest === undefined) {
     return {
+      status: 'error',
       decoration: SYMBOL_ERROR,
       hoverMarkdown: 'No versions available',
     }
@@ -75,7 +80,7 @@ export function formatDependencyResult(result: DependencyValidationResult, docsU
 
   const hoverMarkdown = formatHoverMarkdown(resolved, latestStable, latest, name, docsUrl)
 
-  return { decoration, hoverMarkdown }
+  return { status, decoration, hoverMarkdown }
 }
 
 /**

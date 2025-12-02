@@ -1,14 +1,51 @@
-import { type DecorationOptions, MarkdownString, type TextEditor, window } from 'vscode'
+import {
+  type DecorationOptions,
+  MarkdownString,
+  type TextEditor,
+  type TextEditorDecorationType,
+  ThemeColor,
+  window,
+} from 'vscode'
 import { DOCS_RS_URL, formatDependencyResult, validateCargoTomlContent } from '../core/index.js'
-import type { ValidatorConfig } from '../core/types.js'
+import type { DependencyStatus, ValidatorConfig } from '../core/types.js'
 import { buildValidatorConfig, loadConfigForScope, VSCODE_USER_AGENT } from './config.js'
 import log from './log.js'
 
-const DECORATION_TYPE = window.createTextEditorDecorationType({
-  after: {
-    margin: '2em',
-  },
-})
+// Create decoration types for each status with appropriate colors
+const DECORATION_TYPES: Record<DependencyStatus, TextEditorDecorationType> = {
+  latest: window.createTextEditorDecorationType({
+    after: {
+      margin: '2em',
+      color: new ThemeColor('editorInfo.foreground'),
+    },
+  }),
+  'patch-behind': window.createTextEditorDecorationType({
+    after: {
+      margin: '2em',
+      color: new ThemeColor('editorWarning.foreground'),
+    },
+  }),
+  'minor-behind': window.createTextEditorDecorationType({
+    after: {
+      margin: '2em',
+      color: new ThemeColor('editorWarning.foreground'),
+    },
+  }),
+  'major-behind': window.createTextEditorDecorationType({
+    after: {
+      margin: '2em',
+      color: new ThemeColor('editorError.foreground'),
+    },
+  }),
+  error: window.createTextEditorDecorationType({
+    after: {
+      margin: '2em',
+      color: new ThemeColor('editorError.foreground'),
+    },
+  }),
+}
+
+const ALL_STATUSES: DependencyStatus[] = ['latest', 'patch-behind', 'minor-behind', 'major-behind', 'error']
 
 export async function decorate(editor: TextEditor) {
   const fileName = editor.document.fileName
@@ -37,9 +74,19 @@ export async function decorate(editor: TextEditor) {
   }
 
   const docsUrl = DOCS_RS_URL.toString()
-  const options: DecorationOptions[] = result.dependencies.map((depResult) => {
-    const { decoration, hoverMarkdown } = formatDependencyResult(depResult, docsUrl)
-    return {
+
+  // Group decorations by status for colored styling
+  const decorationsByStatus: Record<DependencyStatus, DecorationOptions[]> = {
+    latest: [],
+    'patch-behind': [],
+    'minor-behind': [],
+    'major-behind': [],
+    error: [],
+  }
+
+  for (const depResult of result.dependencies) {
+    const { status, decoration, hoverMarkdown } = formatDependencyResult(depResult, docsUrl)
+    decorationsByStatus[status].push({
       range: editor.document.lineAt(depResult.dependency.line).range,
       hoverMessage: new MarkdownString(hoverMarkdown),
       renderOptions: {
@@ -47,9 +94,13 @@ export async function decorate(editor: TextEditor) {
           contentText: decoration,
         },
       },
-    }
-  })
+    })
+  }
 
-  editor.setDecorations(DECORATION_TYPE, options)
+  // Apply decorations for each status (clear empty ones too to remove stale decorations)
+  for (const status of ALL_STATUSES) {
+    editor.setDecorations(DECORATION_TYPES[status], decorationsByStatus[status])
+  }
+
   log.info(`${fileName} - file decorated in ${Math.round((Date.now() - start) / 10) / 100} seconds`)
 }

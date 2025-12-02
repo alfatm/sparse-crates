@@ -2,7 +2,7 @@
 
 A VSCode extension and CLI tool helping Rust developers spot outdated dependencies in `Cargo.toml` manifest files.
 
-This is a fork of [**elder-crates**](https://github.com/citreae535/elder-crates) by [citreae535](https://github.com/citreae535), which itself was a fork of [**crates**](https://github.com/serayuzgur/crates) by [Seray Uzgur](https://github.com/serayuzgur).
+This is a fork of [**sparse-crates**](https://github.com/citreae535/sparse-crates) by [citreae535](https://github.com/citreae535), which itself was a fork of [**crates**](https://github.com/serayuzgur/crates) by [Seray Uzgur](https://github.com/serayuzgur).
 
 ![Elder Crates in Action](https://github.com/alfatm/elder-crates/raw/main/elder_crates_in_action.png)
 
@@ -70,6 +70,42 @@ elder-crates-cli ./Cargo.toml --registry my-registry=https://my-registry.example
 | 2    | Major updates available                 |
 | 3    | Errors occurred (e.g., crate not found) |
 
+## Version Requirements
+
+Elder Crates uses [Cargo's version requirement syntax](https://doc.rust-lang.org/cargo/reference/specifying-dependencies.html). A dependency is considered **up-to-date** if the latest stable version satisfies the specified range.
+
+### Default (Caret) Requirements
+
+When you specify a version without operators (e.g., `"1.2.3"`), Cargo interprets it as a caret requirement (`^1.2.3`), allowing SemVer-compatible updates:
+
+| Requirement | Equivalent Range  | Example Matches     |
+| ----------- | ----------------- | ------------------- |
+| `1.2.3`     | `>=1.2.3, <2.0.0` | 1.2.3, 1.3.0, 1.9.9 |
+| `1.2`       | `>=1.2.0, <2.0.0` | 1.2.0, 1.3.0, 1.9.9 |
+| `1`         | `>=1.0.0, <2.0.0` | 1.0.0, 1.5.0, 1.9.9 |
+| `0.2.3`     | `>=0.2.3, <0.3.0` | 0.2.3, 0.2.9        |
+| `0.2`       | `>=0.2.0, <0.3.0` | 0.2.0, 0.2.9        |
+| `0.0.3`     | `>=0.0.3, <0.0.4` | 0.0.3 only          |
+| `0.0`       | `>=0.0.0, <0.1.0` | 0.0.0, 0.0.9        |
+| `0`         | `>=0.0.0, <1.0.0` | 0.0.0, 0.5.0, 0.9.9 |
+
+### Status Indicators
+
+| Symbol | Status       | Meaning                                            |
+| ------ | ------------ | -------------------------------------------------- |
+| ✅      | latest       | Latest stable version satisfies your requirement   |
+| 🟨      | patch-behind | Patch update available outside your range          |
+| 🟧      | minor-behind | Minor update available outside your range          |
+| 🟥      | major-behind | Major update available outside your range          |
+| ❗      | error        | Failed to fetch crate info or no matching versions |
+
+### Examples
+
+- `tokio = "1"` with latest `1.40.0` → ✅ (1.40.0 satisfies `>=1.0.0, <2.0.0`)
+- `serde = "1.0"` with latest `1.0.210` → ✅ (1.0.210 satisfies `>=1.0.0, <2.0.0`)
+- `clap = "3"` with latest `4.5.0` → 🟥 major-behind (4.5.0 doesn't satisfy `>=3.0.0, <4.0.0`)
+- `rand = "0.7"` with latest `0.8.5` → 🟧 minor-behind (0.8.5 doesn't satisfy `>=0.7.0, <0.8.0`)
+
 ## VSCode Extension Configuration
 
 - `elder-crates.useCargoCache`: If true, Cargo's index cache is searched first before the registries. Cache must be stored in the sparse format.
@@ -95,5 +131,5 @@ elder-crates-cli ./Cargo.toml --registry my-registry=https://my-registry.example
 
 ## Thanks
 
-- [citreae535](https://github.com/citreae535), the original author of [**elder-crates**](https://github.com/citreae535/elder-crates)
+- [citreae535](https://github.com/citreae535), the original author of [**sparse-crates**](https://github.com/citreae535/sparse-crates)
 - [Seray Uzgur](https://github.com/serayuzgur), the original author of [**crates**](https://github.com/serayuzgur/crates)
