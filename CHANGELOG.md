@@ -12,6 +12,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Disable check comments**: Skip version checking for specific dependencies or entire files using comments:
   - `# crates: disable-check` on a dependency line skips that crate
   - `#! crates: disable-check` at file start disables all checks in the file
+- **Reload command**: New `Elder Crates: Reload (Clear Cache)` command that clears all caches and reloads the current file
 
 ## [1.1.2] - 2025-12-02
 

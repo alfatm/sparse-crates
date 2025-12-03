@@ -1,5 +1,6 @@
 import { commands, type ExtensionContext, ProgressLocation, type TextEditor, window, workspace } from 'vscode'
 
+import { clearVersionsCache, resetCliToolsCache } from '../core/index.js'
 import { clearCargoConfigCache } from './config.js'
 import { decorate } from './decorate.js'
 import log from './log.js'
@@ -16,6 +17,11 @@ export function activate(context: ExtensionContext) {
   // Register command to manually refresh decorations
   const refreshCommand = commands.registerCommand('elder-crates.refresh', () => {
     refreshAllCargoToml()
+  })
+
+  // Register command to reload current file with full cache clear
+  const reloadCommand = commands.registerCommand('elder-crates.reload', () => {
+    reloadCurrentFile()
   })
 
   // Decorate files when they are first opened
@@ -57,7 +63,7 @@ export function activate(context: ExtensionContext) {
   })
 
   // Register all disposables
-  context.subscriptions.push(refreshCommand, visibleEditorsListener, saveListener, configListener, {
+  context.subscriptions.push(refreshCommand, reloadCommand, visibleEditorsListener, saveListener, configListener, {
     dispose: () => {
       decoratedEditors.clear()
       for (const controller of pendingDecorations.values()) {
@@ -131,5 +137,23 @@ function refreshAllCargoToml() {
     if (isCargoToml(editor)) {
       decorateWithProgress(editor)
     }
+  }
+}
+
+function reloadCurrentFile() {
+  // Clear all caches
+  clearCargoConfigCache()
+  clearVersionsCache()
+  resetCliToolsCache()
+
+  log.info('All caches cleared, reloading current file')
+
+  // Reload the active editor if it's a Cargo.toml
+  const activeEditor = window.activeTextEditor
+  if (activeEditor && isCargoToml(activeEditor)) {
+    decorateWithProgress(activeEditor)
+  } else {
+    // Reload all visible Cargo.toml files
+    refreshAllCargoToml()
   }
 }

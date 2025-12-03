@@ -132,6 +132,11 @@ When you specify a short version or use operators, Cargo interprets it as a rang
 }
 ```
 
+## Commands
+
+- **Elder Crates: Refresh Dependencies** — Re-check dependencies for all visible `Cargo.toml` files
+- **Elder Crates: Reload (Clear Cache)** — Clear all caches (versions, cargo config, CLI tools) and reload the current file
+
 ## Disabling Checks
 
 You can skip version checking for specific dependencies or entire files using comments.

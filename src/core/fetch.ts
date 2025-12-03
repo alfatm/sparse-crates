@@ -47,9 +47,20 @@ class CrateVersionsCache {
   }
 
   get = (key: string) => this.cache.get(key)?.versions
+
+  clear = () => {
+    for (const entry of this.cache.values()) {
+      clearTimeout(entry.callbackId)
+    }
+    this.cache.clear()
+  }
 }
 
 const versionsCache = new CrateVersionsCache()
+
+export function clearVersionsCache(): void {
+  versionsCache.clear()
+}
 
 type LocalSource = 'local registry' | 'cache'
 type Source = 'registry' | LocalSource
