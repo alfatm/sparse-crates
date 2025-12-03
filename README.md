@@ -4,7 +4,7 @@ A VSCode extension and CLI tool helping Rust developers spot outdated dependenci
 
 This is a fork of [**sparse-crates**](https://github.com/citreae535/sparse-crates) by [citreae535](https://github.com/citreae535), which itself was a fork of [**crates**](https://github.com/serayuzgur/crates) by [Seray Uzgur](https://github.com/serayuzgur).
 
-![Fancy Crates in Action](https://github.com/alfatm/fancy-crates/raw/main/fancy_crates_in_action.png)
+![Fancy Crates in Action](https://github.com/alfatm/fancy-crates/raw/main/fancy-crates-in-action.png)
 
 ## Features
 
