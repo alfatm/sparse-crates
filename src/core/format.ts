@@ -34,6 +34,8 @@ export interface FormattedDependency {
   decoration: string
   /** The hover message in markdown format */
   hoverMarkdown: string
+  /** The version to update to (if outdated), for "Update" button */
+  updateVersion?: string
 }
 
 /**
@@ -73,15 +75,19 @@ export function formatDependencyResult(result: DependencyValidationResult, docsU
   const targetVersion = latestStable ?? latest
 
   let decoration: string
+  let updateVersion: string | undefined
+
   if (status === 'latest') {
     decoration = symbol
   } else {
     decoration = `${symbol} ${targetVersion}`
+    // Provide updateVersion for non-latest statuses
+    updateVersion = targetVersion.format()
   }
 
   const hoverMarkdown = formatHoverMarkdown(resolved, latestStable, latest, locked, name, source, docsUrl)
 
-  return { status, decoration, hoverMarkdown }
+  return { status, decoration, hoverMarkdown, updateVersion }
 }
 
 /**

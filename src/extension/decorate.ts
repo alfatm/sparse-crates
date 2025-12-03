@@ -85,10 +85,30 @@ export async function decorate(editor: TextEditor) {
   }
 
   for (const depResult of result.dependencies) {
-    const { status, decoration, hoverMarkdown } = formatDependencyResult(depResult, docsUrl)
+    const { status, decoration, hoverMarkdown, updateVersion } = formatDependencyResult(depResult, docsUrl)
+
+    // Build hover message with optional update command
+    const hoverMessage = new MarkdownString(hoverMarkdown)
+    hoverMessage.isTrusted = true
+
+    // Add update button if there's a newer version available
+    if (updateVersion && depResult.dependency.source.type === 'registry') {
+      const commandArgs = encodeURIComponent(
+        JSON.stringify({
+          filePath: fileName,
+          line: depResult.dependency.line,
+          newVersion: updateVersion,
+          crateName: depResult.dependency.name,
+        }),
+      )
+      hoverMessage.appendMarkdown(
+        `\n\n[⬆️ Update to ${updateVersion}](command:fancy-crates.updateDependency?${commandArgs})`,
+      )
+    }
+
     decorationsByStatus[status].push({
       range: editor.document.lineAt(depResult.dependency.line).range,
-      hoverMessage: new MarkdownString(hoverMarkdown),
+      hoverMessage,
       renderOptions: {
         after: {
           contentText: decoration,

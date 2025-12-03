@@ -4,6 +4,7 @@ import { clearVersionsCache, resetCliToolsCache } from '../core/index.js'
 import { clearCargoConfigCache } from './config.js'
 import { decorate } from './decorate.js'
 import log from './log.js'
+import { type UpdateDependencyArgs, updateDependencyVersion } from './updateDependency.js'
 
 /** Track decorated editors to avoid redundant decoration */
 const decoratedEditors = new Set<TextEditor>()
@@ -22,6 +23,11 @@ export function activate(context: ExtensionContext) {
   // Register command to reload current file with full cache clear
   const reloadCommand = commands.registerCommand('fancy-crates.reload', () => {
     reloadCurrentFile()
+  })
+
+  // Register command to update a dependency to a specific version
+  const updateCommand = commands.registerCommand('fancy-crates.updateDependency', (args: UpdateDependencyArgs) => {
+    updateDependencyVersion(args)
   })
 
   // Decorate files when they are first opened
@@ -63,16 +69,24 @@ export function activate(context: ExtensionContext) {
   })
 
   // Register all disposables
-  context.subscriptions.push(refreshCommand, reloadCommand, visibleEditorsListener, saveListener, configListener, {
-    dispose: () => {
-      decoratedEditors.clear()
-      for (const controller of pendingDecorations.values()) {
-        controller.abort()
-      }
-      pendingDecorations.clear()
-      log.dispose()
+  context.subscriptions.push(
+    refreshCommand,
+    reloadCommand,
+    updateCommand,
+    visibleEditorsListener,
+    saveListener,
+    configListener,
+    {
+      dispose: () => {
+        decoratedEditors.clear()
+        for (const controller of pendingDecorations.values()) {
+          controller.abort()
+        }
+        pendingDecorations.clear()
+        log.dispose()
+      },
     },
-  })
+  )
 
   // Decorate already visible Cargo.toml files on activation
   for (const editor of window.visibleTextEditors) {

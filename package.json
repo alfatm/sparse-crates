@@ -1,6 +1,6 @@
 {
   "name": "fancy-crates",
-  "version": "1.2.7",
+  "version": "1.2.8",
   "author": {
     "name": "alfatm"
   },
@@ -56,6 +56,10 @@
       {
         "command": "fancy-crates.reload",
         "title": "Fancy Crates: Reload (Clear Cache)"
+      },
+      {
+        "command": "fancy-crates.updateDependency",
+        "title": "Fancy Crates: Update Dependency to Latest"
       }
     ],
     "configuration": {
