@@ -23,7 +23,9 @@ export interface RegistryConfig {
 
 /**
  * Parse a registry config into a Registry object.
- * @throws Error if the registry config is invalid
+ * @param registry - The registry configuration to parse
+ * @returns Parsed Registry object with URL instances
+ * @throws Error if the index URL or docs URL is invalid
  */
 export const parseRegistryConfig = (registry: RegistryConfig): Registry => {
   let index: URL
@@ -68,7 +70,10 @@ export const mergeRegistries = (...registrySets: RegistryConfig[][]): RegistryCo
 
 /**
  * Get registry configuration by name, or default crates.io registry.
- * @throws Error if registry not found or invalid
+ * @param name - Registry name, or undefined for crates.io
+ * @param config - Validator configuration containing registry definitions
+ * @returns Registry configuration with URL instances
+ * @throws Error if named registry is not found or has invalid URLs
  */
 export const getRegistry = (name: string | undefined, config: ValidatorConfig): Registry => {
   if (name) {

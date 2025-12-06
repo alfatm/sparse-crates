@@ -11,6 +11,12 @@ const DEFAULT_USER_AGENT = 'FancyCrates (https://github.com/alfatm/fancy-crates)
 const FETCH_TIMEOUT_MS = 30000
 const MAX_SOCKETS = 6
 
+/** Cache expiration time in milliseconds (1 hour) */
+const CACHE_EXPIRATION_MS = 3600000
+
+/** Maximum number of crates to cache */
+const CACHE_MAX_SIZE = 1000
+
 /** Cargo cache format versions (Cargo 0.69 / Rust 1.68.0) */
 const CACHE_FORMAT = {
   version: 3,
@@ -28,11 +34,12 @@ const agent = new Agent({ connections: MAX_SOCKETS })
 interface VersionsCache {
   versions: semver.SemVer[]
   callbackId: NodeJS.Timeout
+  /** Timestamp when entry was added, for LRU eviction */
+  addedAt: number
 }
 
 class CrateVersionsCache {
   private cache = new Map<string, VersionsCache>()
-  private expiration = 3600000 // 1 hour
 
   set = (key: string, versions: semver.SemVer[]) => {
     const existing = this.cache.get(key)
@@ -40,9 +47,19 @@ class CrateVersionsCache {
       clearTimeout(existing.callbackId)
     }
 
+    // Evict oldest entries if cache is full
+    if (this.cache.size >= CACHE_MAX_SIZE && !existing) {
+      this.evictOldest()
+    }
+
+    const timeoutId = setTimeout(() => this.cache.delete(key), CACHE_EXPIRATION_MS)
+    // Prevent timer from blocking Node.js exit
+    timeoutId.unref()
+
     this.cache.set(key, {
       versions,
-      callbackId: setTimeout(() => this.cache.delete(key), this.expiration),
+      callbackId: timeoutId,
+      addedAt: Date.now(),
     })
   }
 
@@ -53,6 +70,26 @@ class CrateVersionsCache {
       clearTimeout(entry.callbackId)
     }
     this.cache.clear()
+  }
+
+  private evictOldest = () => {
+    let oldestKey: string | undefined
+    let oldestTime = Number.POSITIVE_INFINITY
+
+    for (const [key, entry] of this.cache.entries()) {
+      if (entry.addedAt < oldestTime) {
+        oldestTime = entry.addedAt
+        oldestKey = key
+      }
+    }
+
+    if (oldestKey) {
+      const entry = this.cache.get(oldestKey)
+      if (entry) {
+        clearTimeout(entry.callbackId)
+      }
+      this.cache.delete(oldestKey)
+    }
   }
 }
 
@@ -65,6 +102,15 @@ export function clearVersionsCache(): void {
 type LocalSource = 'local registry' | 'cache'
 type Source = 'registry' | LocalSource
 
+/**
+ * Fetch available versions for a crate from a registry.
+ * @param name - The crate name
+ * @param registry - The registry to fetch from
+ * @param useCache - Whether to use local Cargo cache
+ * @param options - Fetch options including logger and user agent
+ * @returns Array of available versions, sorted descending by version
+ * @throws Error if the crate is not found or network request fails
+ */
 export const fetchVersions = async (
   name: string,
   registry: Registry,
@@ -132,15 +178,15 @@ const fetchRemote = async (
 
     const message =
       response.status === 404 || response.status === 410 || response.status === 451
-        ? `crate not found in registry: HTTP ${response.status}`
-        : `unexpected response code: HTTP ${response.status}`
+        ? `${name}: crate not found in registry (HTTP ${response.status})`
+        : `${name}: unexpected response from registry (HTTP ${response.status})`
 
-    log.error(`${name} - ${message}`)
+    log.error(message)
     throw new Error(message)
   } catch (err) {
     if (err instanceof Error && err.name === 'AbortError') {
-      const message = 'connection to registry timeout'
-      log.error(`${name} - ${message}`)
+      const message = `${name}: connection to registry timed out`
+      log.error(message)
       throw new Error(message)
     }
     throw err
@@ -158,8 +204,11 @@ const fetchLocal = async (name: string, dir: string, source: LocalSource, log: L
     return parseIndex(name, buffer, source, log)
   } catch (err) {
     const e = err as NodeJS.ErrnoException
-    const message = e.code === 'ENOENT' ? `crate not found in ${source}` : `${source} read error: ${e}`
-    log.error(`${name} - ${message}`)
+    const message =
+      e.code === 'ENOENT'
+        ? `${name}: crate not found in ${source}`
+        : `${name}: ${source} read error (${e.code ?? e.message})`
+    log.error(message)
     throw new Error(message)
   }
 }
@@ -179,8 +228,8 @@ const parseIndex = (name: string, buffer: Buffer, source: Source, log: Logger): 
     .filter((v): v is semver.SemVer => v !== undefined)
 
   if (versions.length === 0) {
-    const message = `no version found in ${source}`
-    log.warn(`${name} - ${message}`)
+    const message = `${name}: no versions found in ${source}`
+    log.warn(message)
     throw new Error(message)
   }
 
@@ -199,14 +248,14 @@ const parseCacheBuffer = (name: string, buffer: Buffer, log: Logger): string[] =
   const indexVersion = buffer.readUint32LE(1)
 
   if (cacheVersion !== CACHE_FORMAT.version) {
-    const message = `unknown cache version: ${cacheVersion}`
-    log.warn(`${name} - ${message}`)
+    const message = `${name}: unknown cache version (${cacheVersion})`
+    log.warn(message)
     throw new Error(message)
   }
 
   if (indexVersion !== CACHE_FORMAT.indexVersion) {
-    const message = `unknown index version: ${indexVersion}`
-    log.warn(`${name} - ${message}`)
+    const message = `${name}: unknown index version (${indexVersion})`
+    log.warn(message)
     throw new Error(message)
   }
 

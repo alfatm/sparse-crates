@@ -97,8 +97,17 @@ async function main(pathArg: string, options: Options) {
   const jsonOutput = options.json
   const showPlugin = options.showPlugin
   const filterName = options.filter
-  const filterLine = options.line ? Number.parseInt(options.line, 10) : undefined
   const cliRegistries = options.registry
+
+  // Validate --line option
+  let filterLine: number | undefined
+  if (options.line) {
+    filterLine = Number.parseInt(options.line, 10)
+    if (Number.isNaN(filterLine) || filterLine < 1) {
+      console.error('Error: --line must be a positive integer')
+      process.exit(1)
+    }
+  }
 
   // Load cargo config (registries and source replacement)
   const cargoDir = dirname(filePath)

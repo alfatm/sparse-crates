@@ -280,6 +280,13 @@ const validateDependency = (
   return validateSourceDependency(dep, cargoTomlDir, config, lockfile)
 }
 
+/**
+ * Validate all dependencies in a Cargo.toml file.
+ * @param filePath - Path to the Cargo.toml file
+ * @param config - Validator configuration
+ * @returns Validation results for all dependencies
+ * @throws Error if the file cannot be read
+ */
 export const validateCargoToml = async (
   filePath: string,
   config: ValidatorConfig = DEFAULT_CONFIG,
@@ -293,6 +300,14 @@ export const validateCargoToml = async (
   return validateCargoTomlContent(content, filePath, config, lockfile)
 }
 
+/**
+ * Validate all dependencies in Cargo.toml content string.
+ * @param content - The Cargo.toml file content
+ * @param filePath - Path to the Cargo.toml file (used for relative path resolution)
+ * @param config - Validator configuration
+ * @param lockfile - Optional parsed Cargo.lock for locked version info
+ * @returns Validation results for all dependencies (includes parseError if TOML is invalid)
+ */
 export const validateCargoTomlContent = async (
   content: string,
   filePath: string,

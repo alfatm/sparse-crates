@@ -11,6 +11,19 @@ import type { CliToolsAvailability, CustomGitHost, DependencySource, FetchOption
 
 const execAsync = promisify(exec)
 
+/** Timeout for git operations in milliseconds */
+const GIT_TIMEOUT_MS = 30000
+
+/**
+ * Escape a string for safe use in shell commands.
+ * Uses single quotes and escapes any embedded single quotes.
+ */
+const shellEscape = (str: string): string => {
+  // Single quotes prevent all interpretation except for single quotes themselves
+  // Replace ' with '\'' (end quote, escaped quote, start quote)
+  return `'${str.replace(/'/g, "'\\''")}'`
+}
+
 /** Cached CLI tools availability check result */
 let cliToolsCache: CliToolsAvailability | undefined
 
@@ -410,6 +423,27 @@ async function tryGitCliFetch(
 }
 
 /**
+ * Execute git archive and extract file contents safely.
+ * Uses shell escaping to prevent command injection.
+ */
+async function execGitArchive(gitUrl: string, ref: string, filePath: string): Promise<string> {
+  // Use shell escaping to safely pass arguments
+  const escapedUrl = shellEscape(gitUrl)
+  const escapedRef = shellEscape(ref)
+  const escapedPath = shellEscape(filePath)
+
+  const { stdout } = await execAsync(
+    `git archive --remote=${escapedUrl} ${escapedRef} ${escapedPath} 2>/dev/null | tar -xO`,
+    {
+      timeout: GIT_TIMEOUT_MS,
+      maxBuffer: 10 * 1024 * 1024, // 10MB
+    },
+  )
+
+  return stdout
+}
+
+/**
  * Try git archive --remote (works with some git servers that support it)
  */
 async function tryGitArchive(
@@ -420,18 +454,13 @@ async function tryGitArchive(
 ): Promise<SourceResolution> {
   const paths = crateName ? [`${crateName}/Cargo.toml`, 'Cargo.toml'] : ['Cargo.toml']
 
-  for (const filePath of paths) {
+  for (const archivePath of paths) {
     try {
-      options?.logger?.debug(`Trying git archive for ${gitUrl} ref=${ref} path=${filePath}`)
+      options?.logger?.debug(`Trying git archive for ${gitUrl} ref=${ref} path=${archivePath}`)
 
-      const { stdout } = await execAsync(
-        `git archive --remote="${gitUrl}" "${ref}" "${filePath}" 2>/dev/null | tar -xO`,
-        {
-          timeout: 30000,
-        },
-      )
+      const content = await execGitArchive(gitUrl, ref, archivePath)
 
-      const info = extractCargoTomlInfo(stdout)
+      const info = extractCargoTomlInfo(content)
 
       // Use explicit version, or workspace version if usesWorkspaceVersion is true
       const effectiveVersion = info.version ?? (info.usesWorkspaceVersion ? info.workspaceVersion : undefined)
@@ -456,7 +485,7 @@ async function tryGitArchive(
         }
       }
     } catch {
-      options?.logger?.debug(`git archive attempt failed for ${gitUrl} ref=${ref} path=${filePath}`)
+      options?.logger?.debug(`git archive attempt failed for ${gitUrl} ref=${ref} path=${archivePath}`)
       // Try next path
     }
   }
@@ -492,19 +521,14 @@ async function searchWorkspaceMembersGitArchive(
 
   // Try each path
   for (const memberPath of pathsToCheck) {
-    const filePath = `${memberPath}/Cargo.toml`
+    const memberFilePath = `${memberPath}/Cargo.toml`
     try {
-      options?.logger?.debug(`Trying workspace member via git archive: ${filePath}`)
+      options?.logger?.debug(`Trying workspace member via git archive: ${memberFilePath}`)
 
-      const { stdout } = await execAsync(
-        `git archive --remote="${gitUrl}" "${ref}" "${filePath}" 2>/dev/null | tar -xO`,
-        {
-          timeout: 30000,
-        },
-      )
+      const content = await execGitArchive(gitUrl, ref, memberFilePath)
 
-      const memberName = extractPackageName(stdout)
-      const memberInfo = extractCargoTomlInfo(stdout)
+      const memberName = extractPackageName(content)
+      const memberInfo = extractCargoTomlInfo(content)
 
       if (memberName === crateName) {
         // Use explicit version, or workspace version if member uses workspace inheritance
@@ -531,15 +555,15 @@ export interface GitRawUrlResult {
 }
 
 /**
- * Converts a git URL to a raw file URL for fetching Cargo.toml
- * Supports GitHub, GitLab, and custom hosts
+ * Internal helper to build raw file URLs for git hosts.
+ * Handles URL normalization, custom hosts, GitHub, and GitLab.
  */
-export function getGitRawFileUrl(
+const buildGitRawUrl = (
   gitUrl: string,
   ref: string,
-  crateName?: string,
+  filePath: string,
   customHosts?: CustomGitHost[],
-): GitRawUrlResult | undefined {
+): GitRawUrlResult | undefined => {
   // Normalize the URL
   let url = gitUrl.trim()
 
@@ -547,8 +571,6 @@ export function getGitRawFileUrl(
   if (url.endsWith('.git')) {
     url = url.slice(0, -4)
   }
-
-  const filePath = crateName ? `${crateName}/Cargo.toml` : 'Cargo.toml'
 
   // Check custom hosts first
   if (customHosts) {
@@ -596,6 +618,20 @@ export function getGitRawFileUrl(
 }
 
 /**
+ * Converts a git URL to a raw file URL for fetching Cargo.toml
+ * Supports GitHub, GitLab, and custom hosts
+ */
+export function getGitRawFileUrl(
+  gitUrl: string,
+  ref: string,
+  crateName?: string,
+  customHosts?: CustomGitHost[],
+): GitRawUrlResult | undefined {
+  const filePath = crateName ? `${crateName}/Cargo.toml` : 'Cargo.toml'
+  return buildGitRawUrl(gitUrl, ref, filePath, customHosts)
+}
+
+/**
  * Converts a git URL to a raw file URL for a specific file path
  */
 export function getGitRawFileUrlForPath(
@@ -604,57 +640,7 @@ export function getGitRawFileUrlForPath(
   filePath: string,
   customHosts?: CustomGitHost[],
 ): GitRawUrlResult | undefined {
-  // Normalize the URL
-  let url = gitUrl.trim()
-
-  // Remove .git suffix if present
-  if (url.endsWith('.git')) {
-    url = url.slice(0, -4)
-  }
-
-  // Check custom hosts first
-  if (customHosts) {
-    for (const customHost of customHosts) {
-      const hostPattern = customHost.host.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
-      const hostRegex = new RegExp(`${hostPattern}[/:]([^/]+)/([^/]+)`)
-      const match = url.match(hostRegex)
-      if (match) {
-        const [, owner, repo] = match
-        if (customHost.type === 'github') {
-          return {
-            url: `https://${customHost.host}/raw/${owner}/${repo}/${ref}/${filePath}`,
-            token: customHost.token,
-          }
-        }
-        if (customHost.type === 'gitlab') {
-          return {
-            url: `https://${customHost.host}/${owner}/${repo}/-/raw/${ref}/${filePath}`,
-            token: customHost.token,
-          }
-        }
-      }
-    }
-  }
-
-  // Handle GitHub
-  const githubMatch = url.match(/github\.com[/:]([^/]+)\/([^/]+)/)
-  if (githubMatch) {
-    const [, owner, repo] = githubMatch
-    return {
-      url: `https://raw.githubusercontent.com/${owner}/${repo}/${ref}/${filePath}`,
-    }
-  }
-
-  // Handle GitLab
-  const gitlabMatch = url.match(/gitlab\.com[/:]([^/]+)\/([^/]+)/)
-  if (gitlabMatch) {
-    const [, owner, repo] = gitlabMatch
-    return {
-      url: `https://gitlab.com/${owner}/${repo}/-/raw/${ref}/${filePath}`,
-    }
-  }
-
-  return undefined
+  return buildGitRawUrl(gitUrl, ref, filePath, customHosts)
 }
 
 /**

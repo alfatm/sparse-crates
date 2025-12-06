@@ -20,6 +20,9 @@ import {
   validateCargoToml,
 } from '../core/index'
 
+/** Default maximum concurrent validations for batch operations */
+const DEFAULT_BATCH_CONCURRENCY = 10
+
 /**
  * Options for batch validation
  */
@@ -283,7 +286,7 @@ export async function validateBatch(options: BatchValidationOptions): Promise<Ba
     useCargoCache = true,
     registries = [],
     logger = createNoopLogger(),
-    concurrency = 10,
+    concurrency = DEFAULT_BATCH_CONCURRENCY,
   } = options
 
   const absoluteRoot = resolve(rootDir)

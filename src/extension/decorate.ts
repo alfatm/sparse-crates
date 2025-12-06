@@ -41,15 +41,17 @@ let decorationTypes: Record<DependencyStatus, TextEditorDecorationType> | null =
 /** Get or create decoration types (lazy initialization) */
 function getDecorationTypes(): Record<DependencyStatus, TextEditorDecorationType> {
   if (!decorationTypes) {
-    decorationTypes = {} as Record<DependencyStatus, TextEditorDecorationType>
-    for (const status of ALL_STATUSES) {
-      decorationTypes[status] = window.createTextEditorDecorationType({
-        after: {
-          margin: '2em',
-          color: new ThemeColor(STATUS_COLORS[status]),
-        },
-      })
-    }
+    decorationTypes = Object.fromEntries(
+      ALL_STATUSES.map((status) => [
+        status,
+        window.createTextEditorDecorationType({
+          after: {
+            margin: '2em',
+            color: new ThemeColor(STATUS_COLORS[status]),
+          },
+        }),
+      ]),
+    ) as Record<DependencyStatus, TextEditorDecorationType>
   }
   return decorationTypes
 }
